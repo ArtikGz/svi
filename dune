@@ -1,0 +1,7 @@
+(executable
+ (name svi)
+ (libraries curses))
+
+(env
+  (dev
+    (flags (:standard -w -69 -w -37))))
