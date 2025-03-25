@@ -69,28 +69,11 @@ let move_to ed x y =
   let y = in_bounds_y ed y in 
   { ed with cursor = (x, y) }
 
-let move_down ({ cursor = (x, y); _ } as ed) = move_to ed x (y + 1)
-let move_up ({ cursor = (x, y); _ } as ed) = move_to ed x (y - 1)
-let move_right ({ cursor = (x, y); _ } as ed) = move_to ed (x + 1) y
-let move_left ({ cursor = (x, y); _ } as ed) = move_to ed (x - 1) y
-
 let save_editor ed =
   let oc = open_out ed.path in
   let content = String.concat "\n" ed.lines in
   output_string oc content;
   close_out oc
-
-
-let handle_normal_action ed c = 
-  match c with
-  | 'q' -> { ed with exit = true }
-  | 'w' -> save_editor ed; ed
-  | 'j' -> move_down ed
-  | 'k' -> move_up ed
-  | 'l' -> move_right ed
-  | 'h' -> move_left ed
-  | 'i' -> { ed with mode = Insert }
-  | _ -> ed
 
 let get_gap ({ lines; cursor = (x, y); _ }) =
   let line = List.nth lines y in
@@ -129,7 +112,20 @@ let remove_char ({ cursor = (_, y); lines; _ } as ed) =
   let lines = HList.replace lines y (first^second) in
   { ed with lines = lines }
 
-let handle_insert_action ({ cursor = (x, y); _ } as ed) c =
+let handle_normal_action ed c = 
+  let (x, y) = ed.cursor in
+  match c with
+  | 'q' -> { ed with exit = true }
+  | 'w' -> save_editor ed; ed
+  | 'j' -> move_to ed x (y + 1)
+  | 'k' -> move_to ed x (y - 1)
+  | 'l' -> move_to ed (x + 1) y
+  | 'h' -> move_to ed (x - 1) y
+  | 'i' -> { ed with mode = Insert }
+  | _ -> ed
+
+let handle_insert_action ed c =
+  let (x, y) = ed.cursor in
   let d = int_of_char c in
   match d with
   | 27 -> { ed with mode = Normal }
@@ -143,23 +139,24 @@ let handle_insert_action ({ cursor = (x, y); _ } as ed) c =
         { ed with cursor = (len, y - 1) }
     | (_, _) -> 
         let ed = remove_char ed in
-        move_left ed
+        move_to ed (x - 1) y
     )
   | 10 -> 
     let ed = insert_newline ed in
-    { ed with cursor = (0, y + 1) }
+    move_to ed 0 (y + 1)
   | _ -> 
     let ed = insert_character ed c in
-    { ed with cursor = (x + 1, y) }
+    move_to ed (x + 1) y
 
 let handle_action ed c =
   match ed.mode with
   | Normal -> handle_normal_action ed c
   | Insert -> handle_insert_action ed c
   
-let render ({ cursor = (x, y); displayed_line; rows; _ } as ed) = 
+let render ed = 
+  let (x, y) = ed.cursor in
   clear ();
-  for i = displayed_line to (displayed_line + rows) do
+  for i = ed.displayed_line to (ed.displayed_line + ed.rows - 1) do
     let line = List.nth_opt ed.lines i in
     let _ = match line with
       | Some line -> addstr (line ^ "\n")
@@ -186,14 +183,23 @@ let loop ed =
   | Failure msg -> endwin (); failwith msg
   | exn -> endwin (); raise exn
 
-let read_file filepath = 
-  let ic = open_in filepath in
-  let rec get_lines () = 
+module File = struct
+  let rec read_lines ic =
     try 
       let line = input_line ic in
-      line :: get_lines ()
+      line :: read_lines ic
     with End_of_file -> []
-  in { path = filepath; lines = get_lines (); cursor = (0, 0); mode = Normal; exit = false; displayed_line = 0; rows = 0 }
+
+  let read_file_lines filepath =
+    let ic = open_in filepath in
+    let lines = read_lines ic in
+    close_in ic;
+    lines
+end
+
+let read_file filepath = 
+  let lines = File.read_file_lines filepath in
+  { path = filepath; lines; cursor = (0, 0); mode = Normal; exit = false; displayed_line = 0; rows = 0 }
 
 let () = 
   let filepath = Sys.argv.(1) in
