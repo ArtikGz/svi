@@ -1,7 +1,10 @@
 (executable
  (name svi)
- (libraries curses))
+ (libraries curses)
+ (preprocess
+  (pps ppx_deriving.show)))
 
 (env
-  (dev
-    (flags (:standard -w -69 -w -37))))
+ (dev
+  (flags
+   (:standard -w -69 -w -37))))

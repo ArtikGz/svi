@@ -30,16 +30,18 @@ end
 type mode =
   | Normal
   | Insert
+[@@deriving show { with_path = false }]
 
-type editor = { 
+type editor = {
   path : string;
-  lines : string list;
+  lines : string list [@opaque];
   cursor : int * int;
   mode : mode;
   exit : bool;
   displayed_line : int;
   rows : int
 }
+[@@deriving show { with_path = false }]
 
 let init_curses () = 
   let window = initscr () in
@@ -59,14 +61,23 @@ let in_bounds_x ed x y =
   match line with
   | Some line ->
     let len = String.length line in
-    if x > len then len
+    if len = 0 then 0
+    else if x > len - 1 then len - 1
     else if x < 0 then 0
     else x
   | None -> 0
 
+let check_for_page_limit ed y =
+  let overflows_above = y < ed.displayed_line in
+  let overflows_below = y > ed.displayed_line + ed.rows - 1 in
+  if overflows_above then { ed with displayed_line = ed.displayed_line - 1 }
+  else if overflows_below then { ed with displayed_line = ed.displayed_line + 1 }
+  else ed
+
 let move_to ed x y =
   let x = in_bounds_x ed x y in
   let y = in_bounds_y ed y in 
+  let ed = check_for_page_limit ed y in
   { ed with cursor = (x, y) }
 
 let save_editor ed =
@@ -156,6 +167,7 @@ let handle_action ed c =
 let render ed = 
   let (x, y) = ed.cursor in
   clear ();
+  (* let _ = addstr (show_editor ed) in *)
   for i = ed.displayed_line to (ed.displayed_line + ed.rows - 1) do
     let line = List.nth_opt ed.lines i in
     let _ = match line with
@@ -163,7 +175,7 @@ let render ed =
       | None -> addstr "~\n"
     in ()
   done;
-  let _ = move y x in
+  let _ = move (y - ed.displayed_line) x in
   let _ = refresh () in
   ()
 
