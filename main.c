@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <termios.h>
+#include <ncurses.h>
 #include <unistd.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -9,18 +9,6 @@
 #include "vec.h"
 
 #define CURRENT_LINE (editor->lines.elements[editor->cur_y])
-
-static struct termios termios_original, termios_new;
-void termios_raw_mode(void) {
-    tcgetattr(0, &termios_original);
-    termios_new = termios_original;
-    termios_new.c_lflag &= ~(ICANON | ECHO); 
-    tcsetattr(0, TCSANOW, &termios_new); 
-}
-
-void termios_reset(void) {
-    tcsetattr(0, TCSANOW, &termios_original);
-}
 
 typedef enum {
     MODE_NORMAL,
@@ -53,6 +41,8 @@ typedef struct {
 
     bool marked;
     size_t mark_x, mark_y;
+
+    size_t height, width;
 
     Mode mode;
 } Editor;
@@ -102,8 +92,6 @@ ActionResult editor_save_file(Editor* editor) {
 
     return AR_NOTHING;
 }
-
-struct winsize window_size;
 
 void compute_lines(Editor* editor) {
     Lines lines = (Lines){0};
@@ -204,9 +192,9 @@ bool is_in_selection_range(Editor* editor, size_t current) {
 
 void editor_render(Editor* editor) {
     size_t from = editor->display_line;
-    size_t to = editor->display_line + window_size.ws_row - 2;
+    size_t to = editor->display_line + editor->height - 2;
 
-    clear_screen();
+    clear();
     bool in_selection = false;
     for (size_t i = from; i < to; ++i) {
         if (i < editor->lines.count) {
@@ -215,22 +203,22 @@ void editor_render(Editor* editor) {
             for (size_t j = line.start; j < line.end; ++j) {
                 if (is_in_selection_range(editor, j) && !in_selection) {
                     in_selection = true;
-                    printf("\033[47m\033[30m"); 
+                    attrset(COLOR_PAIR(2));
                 } else if (!is_in_selection_range(editor, j) && in_selection) {
                     in_selection = false; 
-                    printf("\033[0m");
+                    attrset(COLOR_PAIR(1));
                 }
 
-                printf("%c", editor->text.elements[j]);
+                printw("%c", editor->text.elements[j]);
             }
         } else {
-            printf("~");
+            printw("~");
         }
-        printf("\n");
+        printw("\n");
     }
-    printf("%s [%li;%li] %s\n", mode_to_string(editor->mode), editor->cur_x, editor->cur_y, editor->filename);
+    printw("%s [%li;%li] %s\n", mode_to_string(editor->mode), editor->cur_x, editor->cur_y, editor->filename);
         
-    printf("\033[%li;%liH", (editor->cur_y - editor->display_line)+1, editor->cur_x+1);
+    move(editor->cur_y - editor->display_line, editor->cur_x);
 
     fflush(stdout);
 }
@@ -243,7 +231,7 @@ ActionResult editor_move(Editor* editor, Direction direction) {
         }; break;
         case DIRECTION_DOWN: {
             if (editor->cur_y < editor->lines.count - 1) editor->cur_y += 1;
-            if (editor->cur_y > editor->display_line + window_size.ws_row - 3) editor->display_line += 1;
+            if (editor->cur_y > editor->display_line + editor->height - 3) editor->display_line += 1;
         }; break;
         case DIRECTION_LEFT: {
             if (editor->cur_x > 0) editor->cur_x -= 1;
@@ -504,23 +492,31 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &window_size);
+    initscr();
+    cbreak();
+    noecho();
 
-    char current;
+    start_color();
+    init_pair(1, COLOR_WHITE, COLOR_BLACK);
+    init_pair(2, COLOR_BLACK, COLOR_WHITE);
+
     int quit = 0;
-    termios_raw_mode();
-        while (!quit) {
-            editor_render(&editor);
-            read(0, &current, 1);
+    while (!quit) {
+        getmaxyx(stdscr, editor.height, editor.width);
 
-            ActionResult result = editor_handle_action(&editor, current);
-            switch (result) {
-                case AR_QUIT_EDITOR: {
-                    quit = 1;
-                }; break;
-                case AR_NOTHING: break;
-            }
+        editor_render(&editor);
+        char current = getch();
+
+        ActionResult result = editor_handle_action(&editor, current);
+        switch (result) {
+            case AR_QUIT_EDITOR: {
+                quit = 1;
+            }; break;
+            case AR_NOTHING: break;
         }
-    clear_screen();
-    termios_reset();
+    }
+
+    clear();
+    echo();
+    endwin();
 }
