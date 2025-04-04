@@ -374,6 +374,14 @@ ActionResult editor_handle_normal(Editor* editor, char action) {
         case 'e': return editor_move_end_word(editor);
         case 'b': return editor_move_begin_word(editor);
         case 'w': return editor_save_file(editor);
+        case 'D': {
+            size_t index = CURRENT_LINE.start + editor->cur_x;
+            while (index < editor->text.count && editor->text.elements[index] != '\n') {
+                VEC_REMOVE(editor->text, index);
+            }
+
+            compute_lines(editor);
+        }; break;
         case 'o': {
             size_t index = CURRENT_LINE.end;
             VEC_INSERT(editor->text, index, '\n');
