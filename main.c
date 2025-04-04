@@ -212,6 +212,11 @@ void editor_render(Editor* editor) {
                 printw("%c", editor->text.elements[j]);
             }
         } else {
+            if (in_selection) {
+                in_selection = false;
+                attrset(COLOR_PAIR(1));
+            }
+
             printw("~");
         }
         printw("\n");
