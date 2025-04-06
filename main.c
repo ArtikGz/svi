@@ -44,6 +44,8 @@ typedef struct {
 
     size_t height, width;
 
+    size_t tab_size;
+
     Mode mode;
 } Editor;
 
@@ -217,11 +219,12 @@ void editor_render(Editor* editor) {
         }
         printw("\n");
     }
+
     printw("%s [%li;%li] %s\n", mode_to_string(editor->mode), editor->cur_x, editor->cur_y, editor->filename);
         
     move(editor->cur_y - editor->display_line, editor->cur_x);
 
-    fflush(stdout);
+    refresh();
 }
 
 ActionResult editor_move(Editor* editor, Direction direction) {
@@ -326,36 +329,52 @@ ActionResult editor_move_begin_word(Editor* editor) {
 }
 
 ActionResult editor_handle_insert(Editor* editor, char action) {
-    if (action == 27) {
-        editor->mode = MODE_NORMAL;
-    } else if (action == '\x7f') {
-        if (CURRENT_LINE.start + editor->cur_x > 0) {
-            size_t index = CURRENT_LINE.start + editor->cur_x - 1;
-            VEC_REMOVE(editor->text, index);
-            compute_lines(editor);
-            
-            if (editor->cur_x == 0) {
-                if (editor->cur_y > 0) {
-                    Line prev_line = editor->lines.elements[editor->cur_y - 1];
-                    editor->cur_x = prev_line.end - prev_line.start;
-                }
-
-                editor_move(editor, DIRECTION_UP);
-            } else {
-                editor_move(editor, DIRECTION_LEFT);
+    switch (action) {
+        // ESCAPE
+        case 27: {
+            editor->mode = MODE_NORMAL;
+        }; break;
+        case '\t': {
+            size_t index = CURRENT_LINE.start + editor->cur_x;
+            for (size_t i = 0; i < editor->tab_size; ++i) {
+                VEC_INSERT(editor->text, index, ' ');
             }
-        }
-    } else {
-        size_t index = CURRENT_LINE.start + editor->cur_x;
-        VEC_INSERT(editor->text, index, action);
 
-        compute_lines(editor);
-        if (action == '\n') {
-            editor_move(editor, DIRECTION_DOWN);
-            editor->cur_x = 0;
-        } else {
-            editor_move(editor, DIRECTION_RIGHT);
-        }
+            editor->cur_x += editor->tab_size;
+            compute_lines(editor);
+        }; break;
+        // BACKSPACE
+        case '\x7f': {
+            if (CURRENT_LINE.start + editor->cur_x > 0) {
+                size_t index = CURRENT_LINE.start + editor->cur_x - 1;
+                VEC_REMOVE(editor->text, index);
+                compute_lines(editor);
+                
+                if (editor->cur_x == 0) {
+                    if (editor->cur_y > 0) {
+                        Line prev_line = editor->lines.elements[editor->cur_y - 1];
+                        editor->cur_x = prev_line.end - prev_line.start;
+                    }
+
+                    editor_move(editor, DIRECTION_UP);
+                } else {
+                    editor_move(editor, DIRECTION_LEFT);
+                }
+            }
+        }; break;
+
+        default: {
+            size_t index = CURRENT_LINE.start + editor->cur_x;
+            VEC_INSERT(editor->text, index, action);
+
+            compute_lines(editor);
+            if (action == '\n') {
+                editor_move(editor, DIRECTION_DOWN);
+                editor->cur_x = 0;
+            } else {
+                editor_move(editor, DIRECTION_RIGHT);
+            }
+        };
     }
 
     return AR_NOTHING;
@@ -490,6 +509,7 @@ int main(int argc, char** argv) {
     }
 
     Editor editor = {0};
+    editor.tab_size = 4;
     if (editor_read_file(&editor, filepath) < 0) {
         fprintf(stderr, "Couldn't read file %s\n", filepath);
         return 1;
