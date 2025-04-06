@@ -26,15 +26,15 @@ typedef enum {
 typedef struct {
     size_t start, end;
 } Line;
-DEFINE_VEC(Lines, Line);
-DEFINE_VEC(Text, char);
+VEC_DEFINE(Lines, Line);
+VEC_DEFINE(String, char);
 
 typedef struct {
     const char* filename;
     const char* filepath;
 
     Lines lines;
-    Text text;
+    String text;
 
     size_t cur_x, cur_y;
     size_t display_line;
@@ -125,7 +125,7 @@ int editor_read_file(Editor* editor, char* filepath) {
 
     if (filepath == NULL) {
         editor->lines = (Lines) {0};
-        editor->text = (Text) {0};
+        editor->text = (String) {0};
     } else {
         FILE* file = fopen(filepath, "r");
         if (file == NULL) {
@@ -375,10 +375,12 @@ ActionResult editor_handle_normal(Editor* editor, char action) {
         case 'b': return editor_move_begin_word(editor);
         case 'w': return editor_save_file(editor);
         case 'D': {
-            size_t index = CURRENT_LINE.start + editor->cur_x;
+            size_t init = CURRENT_LINE.start + editor->cur_x;
+            size_t index = init;
             while (index < editor->text.count && editor->text.elements[index] != '\n') {
-                VEC_REMOVE(editor->text, index);
+                index += 1;
             }
+            VEC_REMOVE_RANGE(editor->text, init, index);
 
             compute_lines(editor);
         }; break;
@@ -432,17 +434,9 @@ void editor_remove_selection(Editor* editor) {
     size_t mark = editor->lines.elements[editor->mark_y].start + editor->mark_x;
     if (cursor != mark) {
         if (mark > cursor) {
-            for (size_t i = mark - 1; i >= cursor; --i) {
-                VEC_REMOVE(editor->text, i);
-
-                if (i == 0) break;
-            }
+            VEC_REMOVE_RANGE(editor->text, cursor, mark);
         } else {
-            for (size_t i = cursor - 1; i >= mark; --i) {
-                VEC_REMOVE(editor->text, i);
-
-                if (i == 0) break;
-            }
+            VEC_REMOVE_RANGE(editor->text, mark, cursor);
             
             editor->cur_x = editor->mark_x;
             editor->cur_y = editor->mark_y;

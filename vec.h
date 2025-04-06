@@ -1,7 +1,7 @@
 #ifndef __H_VEC
 #define __H_VEC
-#include <assert.h>
-#define DEFINE_VEC(name, type) \
+#include <stddef.h>
+#define VEC_DEFINE(name, type) \
     typedef struct {\
         type* elements;\
         size_t count;\
@@ -31,5 +31,10 @@
 #define VEC_REMOVE(array, index) do {\
         memmove(array.elements + index, array.elements + index + 1, array.count - index - 1);\
         array.count -= 1;\
+    } while(0)
+
+#define VEC_REMOVE_RANGE(array, start, end) do {\
+        memmove(array.elements + start, array.elements + end, array.count - end);\
+        array.count -= (end - start);\
     } while(0)
 #endif
