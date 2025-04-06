@@ -164,10 +164,6 @@ int editor_read_file(Editor* editor, char* filepath) {
     return 0;
 }
 
-void clear_screen() {
-    printf("\033[H\033[J");
-}
-
 const char* mode_to_string(Mode mode) {
     switch (mode) {
         case MODE_NORMAL: return "-- NORMAL --";
