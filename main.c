@@ -49,10 +49,54 @@ typedef struct {
     Mode mode;
 } Editor;
 
+void recompute_lines(Editor* editor) {
+    size_t iterations = editor->height - 2;
+
+    size_t init = editor->lines.elements[editor->display_line].start;
+    size_t line = editor->display_line;
+    size_t i = init;
+
+    VEC_REMOVE_RANGE(editor->lines, editor->display_line, editor->display_line + editor->height - 2);
+
+    while (iterations > 0) {
+        if (i >= editor->text.count) break;
+
+        if (editor->text.elements[i] == '\n') {
+            VEC_INSERT(editor->lines, line, ((Line) {
+                .start = init,
+                .end = i
+            }));
+
+            init = i + 1;
+            iterations -= 1;
+            line += 1;
+        }
+
+        i += 1;
+    }
+}
+
 void set_mark(Editor* editor)  {
     editor->marked = true;
     editor->mark_x = editor->cur_x;
     editor->mark_y = editor->cur_y;
+}
+
+void advance_display_line(Editor* editor, Direction direction) {
+    switch (direction) {
+        case DIRECTION_UP: {
+            if (editor->display_line > 0) {
+                editor->display_line -= 1;
+            }
+        }; break;
+        case DIRECTION_DOWN: {
+            if (editor->display_line < editor->lines.count - editor->height + 2) editor->display_line += 1;
+        }; break;
+
+        default: break;
+    }
+
+    recompute_lines(editor);
 }
 
 typedef enum {
@@ -118,6 +162,7 @@ void compute_lines(Editor* editor) {
 
     editor->lines = lines;
 }
+
 
 int editor_read_file(Editor* editor, char* filepath) {
     if (editor == NULL) return -1;
@@ -231,11 +276,11 @@ ActionResult editor_move(Editor* editor, Direction direction) {
     switch (direction) {
         case DIRECTION_UP: {
             if (editor->cur_y > 0) editor->cur_y -= 1;
-            if (editor->cur_y < editor->display_line) editor->display_line -= 1;
+            if (editor->cur_y < editor->display_line) advance_display_line(editor, DIRECTION_UP);
         }; break;
         case DIRECTION_DOWN: {
             if (editor->cur_y < editor->lines.count - 1) editor->cur_y += 1;
-            if (editor->cur_y > editor->display_line + editor->height - 3) editor->display_line += 1;
+            if (editor->cur_y > editor->display_line + editor->height - 3) advance_display_line(editor, DIRECTION_DOWN);
         }; break;
         case DIRECTION_LEFT: {
             if (editor->cur_x > 0) editor->cur_x -= 1;
@@ -334,6 +379,7 @@ ActionResult editor_handle_insert(Editor* editor, char action) {
         case 27: {
             editor->mode = MODE_NORMAL;
         }; break;
+
         case '\t': {
             size_t index = CURRENT_LINE.start + editor->cur_x;
             for (size_t i = 0; i < editor->tab_size; ++i) {
@@ -341,14 +387,15 @@ ActionResult editor_handle_insert(Editor* editor, char action) {
             }
 
             editor->cur_x += editor->tab_size;
-            compute_lines(editor);
+            recompute_lines(editor);
         }; break;
+
         // BACKSPACE
         case '\x7f': {
             if (CURRENT_LINE.start + editor->cur_x > 0) {
                 size_t index = CURRENT_LINE.start + editor->cur_x - 1;
                 VEC_REMOVE(editor->text, index);
-                compute_lines(editor);
+                recompute_lines(editor);
                 
                 if (editor->cur_x == 0) {
                     if (editor->cur_y > 0) {
@@ -367,7 +414,7 @@ ActionResult editor_handle_insert(Editor* editor, char action) {
             size_t index = CURRENT_LINE.start + editor->cur_x;
             VEC_INSERT(editor->text, index, action);
 
-            compute_lines(editor);
+            recompute_lines(editor);
             if (action == '\n') {
                 editor_move(editor, DIRECTION_DOWN);
                 editor->cur_x = 0;
@@ -397,7 +444,7 @@ ActionResult editor_handle_normal(Editor* editor, char action) {
             }
             VEC_REMOVE_RANGE(editor->text, init, index);
 
-            compute_lines(editor);
+            recompute_lines(editor);
         }; break;
         case 'o': {
             size_t index = CURRENT_LINE.end;
@@ -407,7 +454,7 @@ ActionResult editor_handle_normal(Editor* editor, char action) {
             editor->cur_y += 1;
 
             editor->mode = MODE_INSERT;
-            compute_lines(editor);
+            recompute_lines(editor);
         }; break;
         case 'O': {
             size_t index = CURRENT_LINE.start;
@@ -416,7 +463,7 @@ ActionResult editor_handle_normal(Editor* editor, char action) {
             editor->cur_x = 0;
 
             editor->mode = MODE_INSERT;
-            compute_lines(editor);
+            recompute_lines(editor);
         }; break;
         case 'i': {
             editor->mode = MODE_INSERT;
@@ -457,7 +504,7 @@ void editor_remove_selection(Editor* editor) {
             editor->cur_y = editor->mark_y;
         }
 
-        compute_lines(editor);
+        recompute_lines(editor);
     }
 
     editor->marked = false;
